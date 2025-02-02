@@ -15,17 +15,20 @@ final class SearchHistoryViewController: UIViewController {
     }()
 
     private let id = "cell"
-    var searchHistory = [String]()
+
+    var viewModel: SearchHistoryViewModelProtocol?
+    var tableViewDataSource: SearchHistoryDataSourceProtocol?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupNavigationBar()
         setupViews()
+        bindViewModel()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        updateSearchHistory()
+        viewModel?.updateSearchHistory()
     }
 
     private func setupNavigationBar() {
@@ -36,7 +39,7 @@ final class SearchHistoryViewController: UIViewController {
         view.addSubview(tableView)
         view.backgroundColor = .systemGray6
 
-        tableView.dataSource = self
+        tableView.dataSource = tableViewDataSource
         tableView.delegate = self
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: id)
 
@@ -45,22 +48,10 @@ final class SearchHistoryViewController: UIViewController {
         }
     }
 
-    func updateSearchHistory() {
-        searchHistory = CoreDataManager.shared.getSearchHistory()
-        self.tableView.reloadData()
-    }
-}
-
-// MARK: - UITableViewDataSource
-extension SearchHistoryViewController: UITableViewDataSource {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        searchHistory.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: id, for: indexPath)
-        cell.textLabel?.text = searchHistory[indexPath.row]
-        return cell
+    private func bindViewModel() {
+        viewModel?.searchHistory.bind { [weak self] _ in
+            self?.tableView.reloadData()
+        }
     }
 }
 
@@ -68,14 +59,20 @@ extension SearchHistoryViewController: UITableViewDataSource {
 extension SearchHistoryViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let selectedTerm = searchHistory[indexPath.row]
-        performSearch(for: selectedTerm)
+
+        if let selectedTerm = viewModel?.getSearchHistory(at: indexPath.row) {
+            performSearch(for: selectedTerm)
+        }
     }
 
     func performSearch(for term: String) {
-        let searchViewController = SearchViewController()
-        searchViewController.searchAlbums(with: term)
-        searchViewController.searchBar.isHidden = true
-        navigationController?.pushViewController(searchViewController, animated: true)
+        guard let searchViewController = SearchAssembly().build() as? UINavigationController,
+              let rootViewController = searchViewController.viewControllers.first as? SearchViewController else {
+            return
+        }
+
+        rootViewController.searchBar.isHidden = true
+        rootViewController.viewModel?.searchAlbums(with: term)
+        navigationController?.pushViewController(rootViewController, animated: true)
     }
 }
